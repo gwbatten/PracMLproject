@@ -1,0 +1,113 @@
+Using Random Forests to Predict Quality of Exercise
+========================================================
+<hr  color="darkblue">
+Introduction
+--------------------------------------------------------
+Eduardo Velloso et al., in their paper <i>Qualitative Activity Recognition of Weight Lifting Exercises</i>, demonstrate sensor- and model-based approaches to assessing the quality of execution of a weight lifting exercise and providing feedback to the user.  For their experiment, they had six human males perform a biceps curl in varying ways: perfectly (A), elbows to the front (B), dumbbell lifted halfway ( C), dumbbell lowered halfway (D), and throwing hips forward (E).  Inertial Mesurement Units, which provide acceleration, gyroscope, and magentometer data in all 3 axes, were placed in three spots on the user (glove, upper arm, lumbar region) and in one spot on the dumbbell.  Velloso et al. used the Random Forest algorithm to classify the data, and the point of my project was to see if I could use Random Forest techniques and produce similar results. 
+
+Methods
+--------------------------------------------------------
+The dataset I had to work with had to be cleaned up before I could perform an analysis.  In a sense, there were two types of records distinguished by either having a "new window" or not.  Those with the new window contained more data than those without, e.g. kurtosis, skewness, standard deviation, and variance.  One option was to remove those records (which comprised only about 2% of the data), but I chose to leave them in, and remove the extra columns.  The columns had to be removed even if I had deleted the "yes new window" records since they contained no data for the "no new window" records, and by leaving the records in, I was left with a larger dataset (admittedly not by much).  I divided this dataset into a training set (70% of the original) and a test set (30%) using the <code>createDataPartition</code> function in the <code>caret</code> package.
+
+With a clean dataset, I started by making a single tree using the <code>tree</code> package, and used it to predict the test set.  Next, I used <b>cross-validation</b> to determine the size of the optimal tree, and used this data to create a pruned tree.  The pruned tree was used to predict the test set.  
+
+To build a more accurate model, I used the Random Forest algorithm as implemented in the <code>randomForest</code> package, and used the result to predict the test set.  
+
+Results and Discussion
+-------------------------------------------------------
+The single tree had many branches (Fig. 1), and seemed to inherently overfit the data.  I include the tree just to show its structure but did not attempt to make the text readable.  
+```{r fig.width=10, fig.height=7, cache=TRUE, echo=FALSE}
+setwd("C:\\Users\\PE10309\\Downloads\\PracticalMachineLearning\\project")
+library(caret)
+
+pml.tr <- read.csv("pml-training.csv", na.strings=c("", "NA"))
+pml.tr <- pml.tr[,colSums(is.na(pml.tr)) == 0]    #remove columns with NA
+pml.tr <- pml.tr[,-c(1,2,5:7)]
+
+inTrain <- createDataPartition(y=pml.tr$classe, p=0.7, list=FALSE)
+training <- pml.tr[inTrain,]
+test <- pml.tr[-inTrain,]
+
+library(tree)
+tree1 <- tree(classe ~ ., data=training)
+plot(tree1)
+text(tree1, cex=0.5)
+```
+Figure 1. Single tree produced from training data.    
+<br>
+<br>
+<br>
+<br>
+The result of using the single-tree model to predict the test set resulted in the following probability table:
+```{r echo=FALSE}
+library(tree)
+pred <- predict(tree1, test, type="class")
+t <- table(observed=test[,55], predict=pred)
+t <- table(observed=test[,55], predict=pred)
+round((prop.table(t,1)), 2)
+```
+The results are quite a bit better at predicting the class (A-E) than flipping a coin, but they are not great.  Could pruning the tree help?  I used <b>cross-validation</b> (via the <code>cv.tree</code> function in the <code>tree</code> package) to determine what the optimal number of branches would be.  Figure 2 shows the <b>cross-validation</b> results, and indicates that 8 or 9 branches will produce the least deviance.  I chose to prune the tree to 8 branches (simpler is generally preferable), and used the resulting tree (Fig. 3) to predict the test set.
+```{r fig.width=9, fig.keep=7,cache=TRUE, echo=FALSE}
+plot(cv.tree(tree1))
+```
+Figure 2. Deviance vs Number of Branches as determined by cross-validation 
+<br>
+<br>
+<br>
+<br>
+```{r fig.width=9, fig.keep=7, echo=FALSE}
+tree2 <- prune.tree(tree1, best=8)
+plot(tree2) 
+text(tree2)
+```
+Figure 3. Pruned tree without and with labels
+<br>
+<br>
+<br>
+<br>
+The resulting probability table shows that the pruned tree is not better ( worse in many ways), but it is possible that it will perform better on a novel set, i.e. it may generalize better than the original tree.  
+```{r echo=FALSE}
+pred <- predict(tree2, test, type="class")
+t <- table(observed=test[,55], predict=pred)
+t <- table(observed=test[,55], predict=pred)
+round((prop.table(t,1)), 2)
+```
+
+In building the Random Forest model, I originally used 500 trees, but subsequent analysis showed that fewer trees were needed to find the optimal tree.  The best way to see this is to plot the error rate vs the number of trees.  Figure 4 shows that 100 trees produces a nearly optimal tree - indeed 25 trees does most of the work.  
+```{rfig.width=9, fig.keep=7, cache=TRUE, echo=FALSE}
+set.seed(33833)
+library(randomForest)
+ranfor <- randomForest(classe ~ ., data=training, prox=TRUE, ntree=200, importance=T)
+plot(ranfor$err.rate[,1], main="Error Rate Compared With Number Of Trees",
+     xlab="Trees", ylab="Error Rate", type="l")
+```
+Figure 4. Error Rate vs Number of Trees in Random Forest Model
+<br>
+<br>
+<br>
+<br>
+Using 200 trees, the <b>OOB</b> error rate was 0.23%:  
+```{r echo=FALSE, cache=TRUE}
+set.seed(33833)
+randomForest(classe ~ ., data=training, prox=TRUE, ntree=200, importance=T)
+```
+
+I used the resulting model to predict the test set.  The probability table shows the model predicted perfectly.  Of course the real test is on a novel dataset.  
+```{r echo=FALSE}
+library(randomForest)
+pred <- predict(ranfor, test)
+t <- table(observed=test[,55], predict=pred)
+round((prop.table(t,1)), 2)
+```
+
+Cross validation is effectively done within the process of random forests.  As Leo Breiman, who introduced and developed random forests, says on his website (http://www.stat.berkeley.edu/~breiman/RandomForests/cc_home.htm), "[an] unbiased estimate of the test set error . . . is estimated internally, during the run, as follows: Each tree is constructed using a different bootstrap sample from the original data.  About one-third of the cases are left out of the bootstrap sample and not used in the construction of the kth tree."  The <code>randomForest</code> function uses this feature of the algorithm to calculate the <b>OOB/Out</b> of Sample error rate.  
+
+It is certainly possible that I could have made a simpler model by removing some of the variables.  Figure 5 shows some of the variables and their mean decrease in accuracy and the gini impurity criterion.
+<br>
+<br>
+<br>
+<br>
+```{r echo=FALSE}
+varImpPlot(ranfor, main="Variable Importance in Random Forest Model")
+```
+Figure 5. Plot of Variable Importance
