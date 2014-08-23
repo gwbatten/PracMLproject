@@ -17,7 +17,7 @@ Results and Discussion
 -------------------------------------------------------
 The single tree had many branches (Fig. 1), and seemed to inherently overfit the data.  I include the tree just to show its structure but did not attempt to make the text readable.  
 ```{r fig.width=10, fig.height=7, cache=TRUE, echo=FALSE}
-setwd("C:\\Users\\PE10309\\Downloads\\PracticalMachineLearning\\project")
+setwd("C:\\Users\\George\\Documents\\MOOCs\\COURSERA_COURSES\\PracticalMachineLearning\\PracMLproject")
 library(caret)
 
 pml.tr <- read.csv("pml-training.csv", na.strings=c("", "NA"))
